@@ -1,4 +1,3 @@
-// MultistageReverb.h
 #pragma once
 #include <array>
 #include "MultistageReverbConfig.h"  // Defines project::multistage::StageConfig and MultistageReverbConfig
@@ -8,64 +7,68 @@ namespace project {
     namespace multistage {
 
         //--------------------------------------------------------------------------
-        // MultistageReverb Class
+        // MultistageReverb Class (Optimized with compile-time unrolling)
         //--------------------------------------------------------------------------
-        // This class instantiates one StageReverb per stage defined in MultistageReverbConfig.
-        // After each stage processes its input, the fixed, compile-time routing matrix is used
-        // to generate a new input for each stage. The final output is produced by combining
-        // (summing) the routed signals from all stages.
         class MultistageReverb {
         public:
-            // Number of stages defined in the configuration.
             static constexpr size_t numStages = MultistageReverbConfig::stages.size();
 
-            // Constructor: Default constructs one StageReverb per stage.
             MultistageReverb() = default;
 
-            // prepare: Call prepare on each StageReverb with the given sample rate.
+            // prepare: Unrolled call to prepare on each stage.
             void prepare(float sampleRate) {
-                for (size_t i = 0; i < numStages; ++i) {
-                    stages[i].prepare(sampleRate);
-                }
+                prepareStages(sampleRate, std::make_index_sequence<numStages>{});
             }
 
-            // reset: Reset each StageReverb.
+            // reset: Unrolled call to reset on each stage.
             void reset() {
-                for (size_t i = 0; i < numStages; ++i) {
-                    stages[i].reset();
-                }
+                resetStages(std::make_index_sequence<numStages>{});
             }
 
-            // processSample: Process a single input sample through each stage,
-            // apply the send/receive routing, and return the final output.
+            // processSample: Unrolled stage processing, routing, and final summing.
             JUCE_FORCEINLINE float processSample(float input) {
-                // Process each stage.
                 std::array<float, numStages> stageOutputs{};
-                for (size_t i = 0; i < numStages; ++i) {
-                    stageOutputs[i] = stages[i].processSample(input);
-                }
-
-                // Compute routed inputs based on the routing matrix.
-                std::array<float, numStages> routedInputs{};
-                for (size_t dest = 0; dest < numStages; ++dest) {
-                    float sum = 0.f;
-                    for (size_t src = 0; src < numStages; ++src) {
-                        sum += MultistageReverbConfig::routingMatrix[src][dest] * stageOutputs[src];
-                    }
-                    routedInputs[dest] = sum;
-                }
-
-                // Sum the routed inputs to produce the final output.
-                float finalOutput = 0.f;
-                for (size_t i = 0; i < numStages; ++i) {
-                    finalOutput += routedInputs[i];
-                }
-                return finalOutput;
+                computeStageOutputs(input, stageOutputs, std::make_index_sequence<numStages>{});
+                auto routedInputs = computeRoutedInputs(stageOutputs, std::make_index_sequence<numStages>{});
+                return sumArray(routedInputs, std::make_index_sequence<numStages>{});
             }
 
         private:
-            // Correct: Reference StageConfig directly (not as a member of MultistageReverbConfig).
             std::array<StageReverb<StageConfig>, numStages> stages;
+
+            // --- Prepare Helpers ---
+            template <size_t... Is>
+            JUCE_FORCEINLINE void prepareStages(float sr, std::index_sequence<Is...>) {
+                ((stages[Is].prepare(sr)), ...);
+            }
+
+            template <size_t... Is>
+            JUCE_FORCEINLINE void resetStages(std::index_sequence<Is...>) {
+                ((stages[Is].reset()), ...);
+            }
+
+            // --- Stage Processing Helpers ---
+            template <size_t... Is>
+            JUCE_FORCEINLINE void computeStageOutputs(float input, std::array<float, numStages>& outputs, std::index_sequence<Is...>) {
+                ((outputs[Is] = stages[Is].processSample(input)), ...);
+            }
+
+            // For each destination stage, compute the routed input by summing contributions from all sources.
+            template <size_t Dest, size_t... Srcs>
+            JUCE_FORCEINLINE float computeRoutedInputForDest(const std::array<float, numStages>& stageOutputs, std::index_sequence<Srcs...>) {
+                return ((MultistageReverbConfig::routingMatrix[Srcs][Dest] * stageOutputs[Srcs]) + ...);
+            }
+
+            template <size_t... Dests>
+            JUCE_FORCEINLINE std::array<float, numStages> computeRoutedInputs(const std::array<float, numStages>& stageOutputs, std::index_sequence<Dests...>) {
+                return { computeRoutedInputForDest<Dests>(stageOutputs, std::make_index_sequence<numStages>{})... };
+            }
+
+            // Final summing of routed inputs.
+            template <size_t... Is>
+            JUCE_FORCEINLINE float sumArray(const std::array<float, numStages>& arr, std::index_sequence<Is...>) {
+                return (... + arr[Is]);
+            }
         };
 
     } // namespace multistage
