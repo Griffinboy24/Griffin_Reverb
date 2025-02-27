@@ -1,3 +1,4 @@
+// Griffin_Reverb.h
 #pragma once
 #include <JuceHeader.h>
 #include <array>
@@ -7,7 +8,7 @@
 #include <tuple>
 #include <utility>
 
-#include "src\MultistageReverb.h" // This header defines project::multistage::MultistageReverb
+#include "src/MultistageReverb.h" // This header defines project::multistage::MultistageReverb
 
 //------------------------------------------------------------------------------
 // Helper: make_array

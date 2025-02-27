@@ -1,3 +1,4 @@
+// MultistageReverb.h
 #pragma once
 #include <array>
 #include "MultistageReverbConfig.h"  // Defines project::multistage::StageConfig and MultistageReverbConfig
@@ -10,7 +11,7 @@ namespace project {
         // MultistageReverb Class
         //--------------------------------------------------------------------------
         // This class instantiates one StageReverb per stage defined in MultistageReverbConfig.
-        // After each stage processes its input, the fixed, compile?time routing matrix is used
+        // After each stage processes its input, the fixed, compile-time routing matrix is used
         // to generate a new input for each stage. The final output is produced by combining
         // (summing) the routed signals from all stages.
         class MultistageReverb {
