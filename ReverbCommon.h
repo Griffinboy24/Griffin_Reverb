@@ -1,3 +1,4 @@
+// ReverbCommon.h
 #pragma once
 #include <array>
 #include <cmath>
@@ -5,8 +6,6 @@
 #include <vector>
 #include <utility>
 
-//------------------------------------------------------------------------------
-// Fallback definition for JUCE_FORCEINLINE if not already defined.
 #ifndef JUCE_FORCEINLINE
 #if defined(_MSC_VER)
 #define JUCE_FORCEINLINE __forceinline
@@ -15,9 +14,6 @@
 #endif
 #endif
 
-//------------------------------------------------------------------------------
-// Helper: ms_make_array
-// Deduces the size of a std::array from its initializer list.
 template <typename T, typename... Ts>
 constexpr std::array<typename std::common_type<T, Ts...>::type, 1 + sizeof...(Ts)>
 ms_make_array(T t, Ts... ts) {
@@ -27,7 +23,8 @@ ms_make_array(T t, Ts... ts) {
 namespace project {
 
     //==============================================================================
-    // Simple LFO Class (fully inlined for compile-time chain unrolling)
+    // Simple LFO Class (unchanged)
+    //==============================================================================
     class SimpleLFO {
     public:
         SimpleLFO() : frequency(1.f), phase(0.f), sampleRate(44100.f), increment(0.f) {}
@@ -45,7 +42,10 @@ namespace project {
             return parSin(phase);
         }
     private:
-        float frequency, phase, sampleRate, increment;
+        float frequency;
+        float phase;
+        float sampleRate;
+        float increment;
         JUCE_FORCEINLINE float parSin(float ph) const {
             float shifted = 0.5f - ph;
             return shifted * (8.f - 16.f * std::fabs(shifted));
@@ -54,30 +54,34 @@ namespace project {
 
     //==============================================================================
     // Simple Allpass Delay Line Class (SimpleAP)
+    //==============================================================================
     class SimpleAP {
     public:
+        // Default constructor.
         SimpleAP()
-            : baseDelayMs(0.f), maxDelayMs(50.f), coefficient(0.f), depth(0.f), lfoIndex(0),
-            sampleRate(44100.f), smoothedDelay(0.f), smoothedCoeff(0.f), writeIndex(0),
+            : baseDelayMs(0.f), maxDelayMs(0.f), coefficient(0.f), depth(0.f), lfoIndex(0),
+            sampleRate(44100.f), smoothedDelay(0.f), writeIndex(0),
             factorDelay(0.f), powerBufferSize(0), indexMask(0)
         {
         }
+        // Parameterized constructor.
         SimpleAP(float baseDelay, float coeff, float d, size_t lfoIdx)
             : baseDelayMs(baseDelay), coefficient(coeff), depth(d), lfoIndex(lfoIdx),
             sampleRate(44100.f), writeIndex(0)
         {
-            maxDelayMs = baseDelayMs + 50.f;
+            // Allocate enough delay time for the base delay, a fixed margin (50.f), and the maximum modulation depth.
+            maxDelayMs = baseDelayMs + 50.f + depth;
             smoothedDelay = baseDelayMs;
-            smoothedCoeff = coefficient;
         }
 
         void prepare(float sr) {
             sampleRate = sr;
             smoothedDelay = baseDelayMs;
-            smoothedCoeff = coefficient;
+            // The coefficient remains fixed.
             writeIndex = 0;
             factorDelay = sampleRate / 1000.f;
-            int reqSize = static_cast<int>(std::ceil(maxDelayMs * factorDelay)) + 4;
+            // Allocate buffer size to cover the maximum delay (baseDelay + 50.f + depth).
+            int reqSize = static_cast<int>(std::ceil((baseDelayMs + 50.f + depth) * factorDelay)) + 4;
             powerBufferSize = nextPow2(reqSize);
             indexMask = powerBufferSize - 1;
             delayBuffer.assign(powerBufferSize, 0.f);
@@ -86,15 +90,14 @@ namespace project {
             std::fill(delayBuffer.begin(), delayBuffer.end(), 0.f);
             writeIndex = 0;
             smoothedDelay = baseDelayMs;
-            smoothedCoeff = coefficient;
         }
+        // processSample now modulates the delay time rather than the feedback coefficient.
         JUCE_FORCEINLINE float processSample(float x, float lfoValue) {
-            float targetCoeff = coefficient + depth * lfoValue;
-            targetCoeff = std::clamp(targetCoeff, -0.99f, 0.99f);
             constexpr float smoothingFactor = 0.01f;
             float oneMinusSmooth = 1.f - smoothingFactor;
-            smoothedCoeff = oneMinusSmooth * smoothedCoeff + smoothingFactor * targetCoeff;
-            smoothedDelay = oneMinusSmooth * smoothedDelay + smoothingFactor * baseDelayMs;
+            // Compute the modulated delay time: base delay plus (depth-scaled) LFO.
+            float targetDelay = baseDelayMs + depth * lfoValue;
+            smoothedDelay = oneMinusSmooth * smoothedDelay + smoothingFactor * targetDelay;
 
             float D = smoothedDelay * factorDelay;
             int d_int = static_cast<int>(D);
@@ -106,8 +109,9 @@ namespace project {
             int index1 = (index0 + 1) & indexMask;
             float delayedV = (1.f - frac) * delayBuffer[index0] + frac * delayBuffer[index1];
 
-            float v = x - smoothedCoeff * delayedV;
-            float y = smoothedCoeff * v + delayedV;
+            // Use the fixed coefficient.
+            float v = x - coefficient * delayedV;
+            float y = coefficient * v + delayedV;
 
             delayBuffer[writeIndex] = v;
             writeIndex = (writeIndex + 1) & indexMask;
@@ -124,13 +128,18 @@ namespace project {
             x |= x >> 16;
             return x + 1;
         }
-        float baseDelayMs, maxDelayMs, coefficient, depth;
+        float baseDelayMs;
+        float maxDelayMs;
+        float coefficient;
+        float depth;
         size_t lfoIndex;
-        float sampleRate, smoothedDelay, smoothedCoeff;
+        float sampleRate;
+        float smoothedDelay;
         std::vector<float> delayBuffer;
         int writeIndex;
         float factorDelay;
-        int powerBufferSize, indexMask;
+        int powerBufferSize;
+        int indexMask;
     };
 
 } // namespace project
