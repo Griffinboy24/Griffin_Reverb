@@ -8,8 +8,10 @@ namespace project {
 
         //---------------------------------------------------------------------- 
         // StageReverb Class Template
-        // (Fully unrolled via index sequences so that LFO updates, AP processing, 
-        // and the stage routing (via compile-time constants) are bound at compile time.)
+        // Implements per-stage processing.
+        // Each stage updates its LFO(s) and processes its input signal via a chain of allpass delay lines.
+        // The processSample() method now takes the node’s assigned input signal (from the routing network)
+        // rather than a global input.
         //---------------------------------------------------------------------- 
         template <typename StageConfig>
         class StageReverb {
@@ -17,26 +19,30 @@ namespace project {
             static constexpr size_t numLFOs = std::tuple_size<decltype(StageConfig::lfoFrequencies)>::value;
             static constexpr size_t numAPs = std::tuple_size<decltype(StageConfig::aps)>::value;
 
-            // Constructor: Unroll LFO and AP initialization at compile time.
+            // Constructor: Initializes LFOs and APs using compile-time unrolling.
             StageReverb() {
                 initLFOs(std::make_index_sequence<numLFOs>{});
                 initAPs(std::make_index_sequence<numAPs>{});
             }
 
+            // Prepare stage components for the given sample rate.
             void prepare(float sampleRate) {
                 prepareLFOs(sampleRate, std::make_index_sequence<numLFOs>{});
                 prepareAPs(sampleRate, std::make_index_sequence<numAPs>{});
             }
 
+            // Reset AP delay lines.
             void reset() {
                 resetAPs(std::make_index_sequence<numAPs>{});
             }
 
-            // processSample: Update LFOs and process all APs in a fully inlined chain.
-            JUCE_FORCEINLINE float processSample(float input) {
+            // processSample:
+            //  - Processes the assigned node input signal.
+            //  - Updates LFO values and then processes the signal through the chain of APs.
+            JUCE_FORCEINLINE float processSample(float nodeInput) {
                 std::array<float, numLFOs> lfoValues{};
                 updateLFOs(lfoValues, std::make_index_sequence<numLFOs>{});
-                return processAPs<0>(input, lfoValues);
+                return processAPs<0>(nodeInput, lfoValues);
             }
 
         private:
@@ -78,19 +84,19 @@ namespace project {
                 ((lfoValues[Is] = lfos[Is].update()), ...);
             }
 
-            // Recursive unrolling of AP processing.
+            // Recursively unroll the chain of AP processing.
             template <size_t I>
             JUCE_FORCEINLINE typename std::enable_if<I == numAPs, float>::type
-                processAPs(float output, const std::array<float, numLFOs>&) {
-                return output;
+                processAPs(float currentSignal, const std::array<float, numLFOs>&) {
+                return currentSignal;
             }
             template <size_t I>
             JUCE_FORCEINLINE typename std::enable_if < I < numAPs, float>::type
-                processAPs(float output, const std::array<float, numLFOs>& lfoValues) {
+                processAPs(float currentSignal, const std::array<float, numLFOs>& lfoValues) {
                 constexpr size_t cfgLfoIdx = StageConfig::aps[I].lfoIndex;
                 constexpr size_t useIdx = (cfgLfoIdx < numLFOs ? cfgLfoIdx : 0);
-                float newOutput = aps[I].processSample(output, lfoValues[useIdx]);
-                return processAPs<I + 1>(newOutput, lfoValues);
+                float newSignal = aps[I].processSample(currentSignal, lfoValues[useIdx]);
+                return processAPs<I + 1>(newSignal, lfoValues);
             }
         };
 
