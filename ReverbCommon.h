@@ -1,4 +1,3 @@
-// ReverbCommon.h
 #pragma once
 #include <array>
 #include <cmath>
@@ -18,7 +17,7 @@
 
 //------------------------------------------------------------------------------
 // Helper: ms_make_array
-// A renamed helper to deduce the size of a std::array from its initializer list.
+// Deduces the size of a std::array from its initializer list.
 template <typename T, typename... Ts>
 constexpr std::array<typename std::common_type<T, Ts...>::type, 1 + sizeof...(Ts)>
 ms_make_array(T t, Ts... ts) {
@@ -28,8 +27,7 @@ ms_make_array(T t, Ts... ts) {
 namespace project {
 
     //==============================================================================
-    // Simple LFO Class
-    //==============================================================================
+    // Simple LFO Class (fully inlined for compile-time chain unrolling)
     class SimpleLFO {
     public:
         SimpleLFO() : frequency(1.f), phase(0.f), sampleRate(44100.f), increment(0.f) {}
@@ -47,10 +45,7 @@ namespace project {
             return parSin(phase);
         }
     private:
-        float frequency;
-        float phase;
-        float sampleRate;
-        float increment;
+        float frequency, phase, sampleRate, increment;
         JUCE_FORCEINLINE float parSin(float ph) const {
             float shifted = 0.5f - ph;
             return shifted * (8.f - 16.f * std::fabs(shifted));
@@ -59,17 +54,14 @@ namespace project {
 
     //==============================================================================
     // Simple Allpass Delay Line Class (SimpleAP)
-    //==============================================================================
     class SimpleAP {
     public:
-        // Default constructor.
         SimpleAP()
             : baseDelayMs(0.f), maxDelayMs(50.f), coefficient(0.f), depth(0.f), lfoIndex(0),
             sampleRate(44100.f), smoothedDelay(0.f), smoothedCoeff(0.f), writeIndex(0),
             factorDelay(0.f), powerBufferSize(0), indexMask(0)
         {
         }
-        // Parameterized constructor.
         SimpleAP(float baseDelay, float coeff, float d, size_t lfoIdx)
             : baseDelayMs(baseDelay), coefficient(coeff), depth(d), lfoIndex(lfoIdx),
             sampleRate(44100.f), writeIndex(0)
@@ -132,19 +124,13 @@ namespace project {
             x |= x >> 16;
             return x + 1;
         }
-        float baseDelayMs;
-        float maxDelayMs;
-        float coefficient;
-        float depth;
+        float baseDelayMs, maxDelayMs, coefficient, depth;
         size_t lfoIndex;
-        float sampleRate;
-        float smoothedDelay;
-        float smoothedCoeff;
+        float sampleRate, smoothedDelay, smoothedCoeff;
         std::vector<float> delayBuffer;
         int writeIndex;
         float factorDelay;
-        int powerBufferSize;
-        int indexMask;
+        int powerBufferSize, indexMask;
     };
 
 } // namespace project
