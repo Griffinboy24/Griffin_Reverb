@@ -1,19 +1,15 @@
 #pragma once
 #include <array>
+#include <tuple>
 #include "ReverbCommon.h" // Contains ms_make_array and common DSP classes
 
 namespace project {
     namespace multistage {
 
-        //==============================================================================
-        // StageConfig: Configuration for a single reverb stage.
-        // The parameters (LFO frequencies and Allpass Delay Line (AP) definitions) are constexpr.
-        // Note: The baseDelay and depth values are specified in samples (at 44100 Hz) and will be converted to ms internally.
-        //==============================================================================
-        struct StageConfig {
-            // LFO frequencies for modulation in this stage.
-            inline static constexpr auto lfoFrequencies = ms_make_array(1.0f);
-            // AP struct holds parameters for a simple allpass delay line.
+        // Define three distinct stage configuration types.
+        struct StageConfig0 {
+            inline static constexpr auto lfoFrequencies = ms_make_array(1.1341f);
+            // Removed post-delay parameter.
             struct AP {
                 float baseDelay;      // in samples (at 44100 Hz)
                 float coefficient;
@@ -21,41 +17,65 @@ namespace project {
                 size_t lfoIndex;
                 constexpr float maxDelay() const { return baseDelay + 50.f; }
             };
-            // Array of AP configurations.
             inline static constexpr auto aps = ms_make_array(
-                AP{ 100.0f, 0.7f, 10.0f, 0 } // For example, 100 samples delay 
+                AP{ 80.0f, 0.55f, 8.0f, 0 },
+                AP{ 120.0f, 0.55f, 8.0f, 0 },
+                AP{ 200.0f, 0.55f, 8.0f, 0 },
+                AP{ 280.0f, 0.55f, 8.0f, 0 },
+                AP{ 440.0f, 0.55f, 8.0f, 0 }
             );
         };
 
-        //==============================================================================
-        // MultistageReverbConfig: Top-level configuration for the reverb network.
-        // Defines both the stages and the compile-time routing matrix.
-        //==============================================================================
+        struct StageConfig1 {
+            inline static constexpr auto lfoFrequencies = ms_make_array(0.9128f, 1.1341f, 1.0f);
+            // Removed post-delay parameter.
+            struct AP {
+                float baseDelay;      // in samples (at 44100 Hz)
+                float coefficient;
+                float depth;          // in samples (at 44100 Hz)
+                size_t lfoIndex;
+                constexpr float maxDelay() const { return baseDelay + 50.f; }
+            };
+            inline static constexpr auto aps = ms_make_array(
+                AP{ 1200.0f, 0.65f, 10.0f, 2 },
+                AP{ 1400.0f, 0.63f, 9.0f, 1 },
+                AP{ 1600.0f, 0.61f, 11.0f, 0 },
+                AP{ 1800.0f, 0.59f, 10.0f, 2 },
+                AP{ 2000.0f, 0.57f, 9.0f, 1 }
+            );
+        };
+
+        struct StageConfig2 {
+            inline static constexpr auto lfoFrequencies = ms_make_array(0.1f);
+            // Removed post-delay parameter.
+            struct AP {
+                float baseDelay;      // in samples (at 44100 Hz)
+                float coefficient;
+                float depth;          // in samples (at 44100 Hz)
+                size_t lfoIndex;
+                constexpr float maxDelay() const { return baseDelay + 50.f; }
+            };
+            inline static constexpr auto aps = ms_make_array(
+                AP{ 100.0f, 0.0f, 0.0f, 0 }
+            );
+        };
+
+        // Wrap configuration constants in a struct.
         struct MultistageReverbConfig {
-            inline static constexpr std::array<StageConfig, 2> stages = { StageConfig{}, StageConfig{} };
-            inline static constexpr size_t NumNodes = stages.size() + 2;
+            using StageTuple = std::tuple<StageConfig0, StageConfig1, StageConfig2>;
+            inline static constexpr StageTuple stages = StageTuple{ StageConfig0{}, StageConfig1{}, StageConfig2{} };
+            static constexpr size_t NumStages = std::tuple_size<StageTuple>::value;
+            static constexpr size_t NumNodes = NumStages + 2;  // Input + stages + output.
             inline static constexpr size_t InputIndex = 0;
             inline static constexpr size_t FirstStageIndex = 1;
             inline static constexpr size_t OutputIndex = NumNodes - 1;
-
-            /*
-                       |  In  |  S0  |  S1  |  Out
-                  ---------------------------------
-                  In   |  0   |  0   |  0   |  0.0
-                  S0   |  0   |  0   |  0   |  0.0
-                  S1   |  0   |  0   |  0   |  0.0
-                  Out  |  0   |  0   |  0   |  0.0
-            */
-            // The routing matrix is defined such that:
-            //   - The Input (row 0) is routed entirely to S0.
-            //   - S0 is routed entirely to the Output.
-            //   - Other nodes have no contributions.
             inline static constexpr std::array<std::array<float, NumNodes>, NumNodes> routingMatrix = { {
-                    { 0.0f,  1.0f,  0.0f,  0.0f },
-                    { 0.0f,  0.0f,  1.0f,  0.0f },
-                    { 0.0f,  0.0f,  0.0f,  1.0f },
-                    { 0.0f,  0.0f,  0.0f,  0.0f }
-                } };
+                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f },
+                { 0.0f, 0.0f, 0.7f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }
+            } };
         };
 
     } // namespace multistage

@@ -1,8 +1,10 @@
 #pragma once
 #include <array>
+#include <tuple>
 #include <utility>
-#include "MultistageReverbConfig.h"  // Contains the (N+2)x(N+2) routing matrix and symbolic indices.
-#include "StageReverb.h"             // Defines the per-stage processing (LFO & AP chain).
+#include "MultistageReverbConfig.h"  // Contains configuration constants.
+#include "StageReverb.h"             // Templated on the configuration type.
+#include "ReverbCommon.h"            // Provides common DSP utilities.
 
 namespace project {
     namespace multistage {
@@ -10,26 +12,16 @@ namespace project {
         //--------------------------------------------------------------------------
         // MultistageReverb Class
         //
-        // New Routing Convention:
-        //   - Rows represent the source nodes.
-        //   - Columns represent the destination nodes.
-        // For each destination node j, its value is computed
-        //
-        // Integrated Stage Processing:
-        //   - For each stage node (indices FirstStageIndex to FirstStageIndex+numStages-1),
-        //     we compute the routed input for that node and immediately pass it through
-        //     its processor.
-        //   - Finally, the output node is computed from the updated node array.
-        // This single-pass integration prevents double-summing that can cause feedback.
+        // Persistent Node Network:
+        //   - A persistent nodeState array is maintained across samples.
+        //   - Each new sample is processed using the previous sample's state,
+        //     naturally introducing a one-sample delay in the feedback paths.
         //--------------------------------------------------------------------------
         class MultistageReverb {
         public:
-            // Number of reverb stages.
-            static constexpr size_t numStages = MultistageReverbConfig::stages.size();
-            // Total nodes = input + stages + output.
+            static constexpr size_t NumStages = MultistageReverbConfig::NumStages;
             static constexpr size_t NumNodes = MultistageReverbConfig::NumNodes;
 
-            // --- Static Validation ---
             static_assert(MultistageReverbConfig::routingMatrix.size() == NumNodes,
                 "Routing matrix must have NumNodes rows");
             static_assert(MultistageReverbConfig::routingMatrix[0].size() == NumNodes,
@@ -39,70 +31,72 @@ namespace project {
             static_assert(MultistageReverbConfig::OutputIndex == NumNodes - 1,
                 "Output node must be index NumNodes-1");
 
-            MultistageReverb() = default;
+            MultistageReverb() {
+                nodeState.fill(0.f);
+            }
 
             void prepare(float sampleRate) {
-                prepareStages(sampleRate, std::make_index_sequence<numStages>{});
+                prepareStages(sampleRate, std::make_index_sequence<NumStages>{});
+                nodeState.fill(0.f);
             }
             void reset() {
-                resetStages(std::make_index_sequence<numStages>{});
+                resetStages(std::make_index_sequence<NumStages>{});
+                nodeState.fill(0.f);
             }
 
-            // processSample: Processes one sample through the node network.
-            //   - The node array is initialized with the input at node 0.
-            //   - For each stage node, its routed input is computed and processed immediately.
-            //   - The final output is computed from the updated node array.
+            // processSample: Processes one sample using the persistent node network.
+            // The new node state is computed from the previous state, which allows
+            // the feedback from later stages to be incorporated (with a one-sample delay).
             JUCE_FORCEINLINE float processSample(float input) {
-                std::array<float, NumNodes> nodeArray{}; // Initialize all nodes to 0.
-                nodeArray[MultistageReverbConfig::InputIndex] = input; // Place the external input.
+                std::array<float, NumNodes> newState = nodeState;
+                newState[MultistageReverbConfig::InputIndex] = input;
 
-                // --- Integrated Stage Processing ---
-                // For each stage, compute its routed input (from all nodes) and process it.
-                processStagesCombined(nodeArray, std::make_index_sequence<numStages>{});
+                processStagesCombined(newState, nodeState, std::make_index_sequence<NumStages>{});
 
-                // --- Final Routing ---
-                // Compute the output node's value from the updated node array.
-                return computeDestination<MultistageReverbConfig::OutputIndex>(nodeArray);
+                float out = computeDestination<MultistageReverbConfig::OutputIndex>(newState);
+                nodeState = newState;
+                return out;
             }
 
         private:
-            // Array of stage processors; stage i corresponds to node index (FirstStageIndex + i).
-            std::array<StageReverb<StageConfig>, numStages> stages;
+            using StageConfig0 = std::tuple_element_t<0, MultistageReverbConfig::StageTuple>;
+            using StageConfig1 = std::tuple_element_t<1, MultistageReverbConfig::StageTuple>;
+            using StageConfig2 = std::tuple_element_t<2, MultistageReverbConfig::StageTuple>;
+            std::tuple< StageReverb<StageConfig0>, StageReverb<StageConfig1>, StageReverb<StageConfig2> > stages;
+            std::array<float, NumNodes> nodeState;
 
-            // --- Stage Preparation and Reset Helpers ---
-            template <size_t... Is>
+            // Prepare stage processors.
+            template <std::size_t... Is>
             JUCE_FORCEINLINE void prepareStages(float sr, std::index_sequence<Is...>) {
-                ((stages[Is].prepare(sr)), ...);
+                ((std::get<Is>(stages).prepare(sr)), ...);
             }
-            template <size_t... Is>
+            template <std::size_t... Is>
             JUCE_FORCEINLINE void resetStages(std::index_sequence<Is...>) {
-                ((stages[Is].reset()), ...);
+                ((std::get<Is>(stages).reset()), ...);
             }
 
-            // --- Routing Computation ---
-            // Computes the value for a destination node j 
+            // Routing computation: for destination node j, compute:
+            //   sum_{i=0}^{NumNodes-1} ( state[i] * routingMatrix[i][j] )
             template <size_t j>
-            JUCE_FORCEINLINE float computeDestination(const std::array<float, NumNodes>& nodeArray) {
-                return computeDestinationImpl<j>(nodeArray, std::make_index_sequence<NumNodes>{});
+            JUCE_FORCEINLINE float computeDestination(const std::array<float, NumNodes>& state) {
+                return computeDestinationImpl<j>(state, std::make_index_sequence<NumNodes>{});
             }
             template <size_t j, size_t... Is>
-            JUCE_FORCEINLINE float computeDestinationImpl(const std::array<float, NumNodes>& nodeArray,
+            JUCE_FORCEINLINE float computeDestinationImpl(const std::array<float, NumNodes>& state,
                 std::index_sequence<Is...>) {
-                return ((nodeArray[Is] * MultistageReverbConfig::routingMatrix[Is][j]) + ...);
+                return ((state[Is] * MultistageReverbConfig::routingMatrix[Is][j]) + ...);
             }
 
-            // --- Integrated Stage Processing Helper ---
-            // For each stage (indexed by i), do:
-            //   - Compute its routed input using the routing matrix at destination (FirstStageIndex + i).
-            //   - Process that routed input with the stage processor.
-            //   - Store the processed output back into nodeArray at index (FirstStageIndex + i).
-            template <size_t... Is>
-            JUCE_FORCEINLINE void processStagesCombined(std::array<float, NumNodes>& nodeArray,
+            // Process each stage: update newState for stage i using the previous state.
+            template <std::size_t... Is>
+            JUCE_FORCEINLINE void processStagesCombined(std::array<float, NumNodes>& newState,
+                const std::array<float, NumNodes>& oldState,
                 std::index_sequence<Is...>) {
-                ((nodeArray[MultistageReverbConfig::FirstStageIndex + Is] =
-                    stages[Is].processSample(
-                        computeDestination<MultistageReverbConfig::FirstStageIndex + Is>(nodeArray)
-                    )), ...);
+                ((newState[MultistageReverbConfig::FirstStageIndex + Is] =
+                    std::get<Is>(stages).processSample(
+                        computeDestination<MultistageReverbConfig::FirstStageIndex + Is>(oldState)
+                    )
+                    ), ...);
             }
         };
 

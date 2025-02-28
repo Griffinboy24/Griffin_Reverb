@@ -53,42 +53,28 @@ namespace project {
 
     //==============================================================================
     // Simple Allpass Delay Line Class (SimpleAP)
-    // 
-    // Now, baseDelay and depth are specified in samples (at 44100 Hz)
-    // and converted internally to milliseconds.
-    // The extra smoothing layer has been removed so that the modulated delay time
-    // is computed directly as: targetDelay = baseDelayMs + depth * lfoValue.
+    //
+    // The modulated delay time is computed as: targetDelay = baseDelay + depth * lfoValue.
     //==============================================================================
     class SimpleAP {
     public:
-        // Default constructor.
         SimpleAP()
-            : baseDelayMs(0.f), maxDelayMs(0.f), coefficient(0.f), depth(0.f), lfoIndex(0),
+            : baseDelay(0.f), maxDelay(0.f), coefficient(0.f), depth(0.f), lfoIndex(0),
             sampleRate(44100.f), writeIndex(0),
-            factorDelay(0.f), powerBufferSize(0), indexMask(0)
+            powerBufferSize(0), indexMask(0)
         {
         }
-        // Parameterized constructor.
-        // The parameters baseDelay and d (depth) are provided in samples (assuming 44100 Hz)
-        // and converted to milliseconds for internal processing.
         SimpleAP(float baseDelay, float coeff, float d, size_t lfoIdx)
-            : coefficient(coeff), lfoIndex(lfoIdx),
+            : baseDelay(baseDelay), coefficient(coeff), depth(d), lfoIndex(lfoIdx),
             sampleRate(44100.f), writeIndex(0)
         {
-            float refRate = 44100.f;
-            // Convert sample count to milliseconds: (samples / 44100) * 1000.
-            float convertedBaseDelay = (baseDelay * 1000.f) / refRate;
-            float convertedDepth = (d * 1000.f) / refRate;
-            baseDelayMs = convertedBaseDelay;
-            depth = convertedDepth;
-            maxDelayMs = baseDelayMs + 50.f + convertedDepth;
+            maxDelay = baseDelay + 50.f;
         }
 
         void prepare(float sr) {
             sampleRate = sr;
             writeIndex = 0;
-            factorDelay = sampleRate / 1000.f;
-            int reqSize = static_cast<int>(std::ceil((baseDelayMs + 50.f + depth) * factorDelay)) + 4;
+            int reqSize = static_cast<int>(std::ceil(maxDelay)) + 4;
             powerBufferSize = nextPow2(reqSize);
             indexMask = powerBufferSize - 1;
             delayBuffer.assign(powerBufferSize, 0.f);
@@ -97,13 +83,10 @@ namespace project {
             std::fill(delayBuffer.begin(), delayBuffer.end(), 0.f);
             writeIndex = 0;
         }
-        // processSample: Computes the modulated delay time directly without additional smoothing.
         JUCE_FORCEINLINE float processSample(float x, float lfoValue) {
-            // Direct computation of target delay (in ms) from base delay and LFO modulation.
-            float targetDelay = baseDelayMs + depth * lfoValue;
-            float D = targetDelay * factorDelay;  // Convert ms delay to samples.
-            int d_int = static_cast<int>(D);
-            float d_frac = D - static_cast<float>(d_int);
+            float targetDelay = baseDelay + depth * lfoValue;
+            int d_int = static_cast<int>(targetDelay);
+            float d_frac = targetDelay - static_cast<float>(d_int);
             bool hasFraction = (d_frac > 0.f);
             int offset = hasFraction ? 1 : 0;
             int index0 = (writeIndex - d_int - offset) & indexMask;
@@ -111,7 +94,6 @@ namespace project {
             int index1 = (index0 + 1) & indexMask;
             float delayedV = (1.f - frac) * delayBuffer[index0] + frac * delayBuffer[index1];
 
-            // Apply fixed coefficient.
             float v = x - coefficient * delayedV;
             float y = coefficient * v + delayedV;
 
@@ -130,15 +112,14 @@ namespace project {
             x |= x >> 16;
             return x + 1;
         }
-        float baseDelayMs;
-        float maxDelayMs;
+        float baseDelay;
+        float maxDelay;
         float coefficient;
         float depth;
         size_t lfoIndex;
         float sampleRate;
         std::vector<float> delayBuffer;
         int writeIndex;
-        float factorDelay;
         int powerBufferSize;
         int indexMask;
     };
