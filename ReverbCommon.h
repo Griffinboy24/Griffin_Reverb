@@ -44,7 +44,7 @@ namespace project {
             phase = 0.f;
         }
 
-        // returns amplitude * approximate sine
+        // Returns amplitude * approximate sine
         JUCE_FORCEINLINE float update() {
             phase += increment;
             if (phase >= 1.f) {
@@ -53,7 +53,7 @@ namespace project {
             return amplitude * parSin(phase);
         }
 
-        // optionally set amplitude or frequency at runtime
+        // Set amplitude or frequency at runtime
         void setAmplitude(float newAmp) { amplitude = newAmp; }
         void setFrequency(float newFreq) {
             frequency = newFreq;
@@ -61,8 +61,8 @@ namespace project {
         }
 
     private:
-        float frequency;   // frequency in Hz
-        float amplitude;   // LFO amplitude
+        float frequency;
+        float amplitude;
         float phase;
         float sampleRate;
         float increment;
@@ -74,22 +74,23 @@ namespace project {
     };
 
     //==============================================================
-    // SimpleAP: no local depth, uses baseDelay + lfoValue
+    // SimpleAP: uses baseDelay + lfoValue and supports precomputed scaling.
     //==============================================================
     class SimpleAP {
     public:
         SimpleAP()
-            : baseDelay(0.f), maxDelay(0.f), coefficient(0.f),
+            : originalBaseDelay(0.f), effectiveBaseDelay(0.f), coefficient(0.f),
             lfoIndex(0), sampleRate(44100.f), writeIndex(0),
-            powerBufferSize(0), indexMask(0)
+            powerBufferSize(0), indexMask(0), scaleDelay(false)
         {
         }
 
-        SimpleAP(float baseD, float coeff, size_t lfoIdx)
-            : baseDelay(baseD), coefficient(coeff), lfoIndex(lfoIdx),
-            sampleRate(44100.f), writeIndex(0)
+        // Constructor with scale flag
+        SimpleAP(float baseD, float coeff, size_t lfoIdx, bool scale)
+            : originalBaseDelay(baseD), effectiveBaseDelay(baseD), coefficient(coeff),
+            lfoIndex(lfoIdx), sampleRate(44100.f), writeIndex(0), scaleDelay(scale)
         {
-            maxDelay = baseDelay + 50.f;
+            maxDelay = effectiveBaseDelay + 50.f;
         }
 
         void prepare(float sr) {
@@ -106,15 +107,23 @@ namespace project {
             writeIndex = 0;
         }
 
-        JUCE_FORCEINLINE float processSample(float x, float lfoValue)
-        {
-            float targetDelay = baseDelay + lfoValue;
+        // Update effective delay based on the global size parameter if scaling is enabled.
+        void updateDelayTime(float globalSize) {
+            if (scaleDelay) {
+                effectiveBaseDelay = originalBaseDelay * globalSize;
+                maxDelay = effectiveBaseDelay + 50.f;
+                // Optionally, re-prepare delayBuffer if maxDelay changes significantly.
+            }
+        }
+
+        JUCE_FORCEINLINE float processSample(float x, float lfoValue) {
+            float targetDelay = effectiveBaseDelay + lfoValue;
             if (targetDelay < 0.f) {
-                targetDelay = 0.f; // safety clamp
+                targetDelay = 0.f;
             }
 
             int d_int = static_cast<int>(targetDelay);
-            float d_frac = targetDelay - (float)d_int;
+            float d_frac = targetDelay - static_cast<float>(d_int);
 
             bool hasFraction = (d_frac > 0.f);
             int offset = hasFraction ? 1 : 0;
@@ -146,16 +155,17 @@ namespace project {
             return x + 1;
         }
 
-        float baseDelay;
+        float originalBaseDelay;
+        float effectiveBaseDelay;
         float maxDelay;
         float coefficient;
         size_t lfoIndex;
         float sampleRate;
-
         std::vector<float> delayBuffer;
         int writeIndex;
         int powerBufferSize;
         int indexMask;
+        bool scaleDelay;
     };
 
 } // namespace project

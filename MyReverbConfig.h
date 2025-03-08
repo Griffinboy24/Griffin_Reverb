@@ -3,6 +3,14 @@
 #include <tuple>
 #include "ReverbCommon.h"
 
+// To do:  
+// 1) Allow for global user parameters on delay length and coefficients and feedback 
+// 2) Allow routing to unique stereo stages as final outputs
+// 3) Create svf filter stages (routable) 
+// 4) Is there a cleverer way to define routing? Make it easier for different stage types. Perhaps not a matrix but a list of connections? Increase Freedom. 
+// 5) Higher order (nested) allpass types support 
+// 6) FDN support + classic multichannel matrix types built in
+
 namespace project {
     namespace multistage {
 
@@ -10,11 +18,12 @@ namespace project {
         {
             // LFO definitions
             static constexpr size_t NumGlobalLFOs = 3;
-            inline static constexpr auto lfoFrequencies = ms_make_array(0.9128f, 1.1341, 1.0f);
+            inline static constexpr auto lfoFrequencies = ms_make_array(0.9128f, 1.1341f, 1.0f);
             inline static constexpr auto lfoAmplitudes = ms_make_array(11.0f, 9.0f, 10.0f);
 
             // Stage0 
             struct StageConfig0 {
+                static constexpr bool scaleDelay = false; // Delay times will be scaled.
                 struct AP {
                     float baseDelay;
                     float coefficient;
@@ -31,6 +40,7 @@ namespace project {
 
             // Stage1
             struct StageConfig1 {
+                static constexpr bool scaleDelay = true;  // Delay times will be scaled.
                 struct AP {
                     float baseDelay;
                     float coefficient;
@@ -48,6 +58,7 @@ namespace project {
 
             // Stage2 
             struct StageConfig2 {
+                static constexpr bool scaleDelay = true; // Delay times will be scaled.
                 struct AP {
                     float baseDelay;
                     float coefficient;
@@ -69,34 +80,11 @@ namespace project {
             static constexpr size_t NumStages = std::tuple_size<StageTuple>::value;
             static constexpr size_t NumNodes = NumStages + 2;
 
-            
-            /*
-         |  In  |  S0  |  S1  |  S2  |  Out
------------------------------------------------
-In       | 0.0  | 1.0  | 0.0  | 0.0  | 0.0
-S0       | 0.0  | 0.0  | 0.0  | 0.0  | 1.0
-S1       | 0.0  | 0.0  | 0.0  | 0.0  | 0.0
-S2       | 0.0  | 0.0  | 0.0  | 0.0  | 0.0
-Out      | 0.0  | 0.0  | 0.0  | 0.0  | 0.0
-
-
-
-                { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }
-            
-
-
-*/
-
-
             // 5x5 routing matrix
             inline static constexpr std::array<std::array<float, NumNodes>, NumNodes> routingMatrix =
             { {
                 { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 1.0f, 1.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f },
                 { 0.0f, 0.0f, 0.7f, 0.0f, 1.0f },
                 { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f },
                 { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }

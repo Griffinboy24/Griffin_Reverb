@@ -18,11 +18,11 @@ namespace project {
 
             static constexpr auto routingMatrix = Config::routingMatrix;
 
-            // We'll store an LFO array plus a float array for their outputs
+            // Global LFO array and output storage
             std::array<project::SimpleLFO, NumGlobalLFOs> globalLFOs;
             std::array<float, NumGlobalLFOs> globalLfoValues{};
 
-            // Build a tuple of StageReverb<the stage configs...>
+            // Build a tuple of StageReverb objects for the stages.
             template <std::size_t I>
             using SingleStage = StageReverb<std::tuple_element_t<I, typename Config::StageTuple>>;
 
@@ -41,7 +41,7 @@ namespace project {
             MultiStageReverb()
             {
                 nodeState.fill(0.f);
-                // Build each LFO from config
+                // Initialize each LFO from config
                 for (size_t i = 0; i < NumGlobalLFOs; ++i)
                 {
                     float freq = Config::lfoFrequencies[i];
@@ -52,14 +52,13 @@ namespace project {
 
             void prepare(float sampleRate)
             {
-                // LFO prepare
+                // Prepare LFOs
                 for (auto& l : globalLFOs) {
                     l.prepare(sampleRate);
                 }
-                // Stages
+                // Prepare stages
                 prepareStages(sampleRate, std::make_index_sequence<NumStages>{});
                 setStageGlobalLfoPointers(std::make_index_sequence<NumStages>{});
-
                 nodeState.fill(0.f);
             }
 
@@ -74,27 +73,30 @@ namespace project {
 
             JUCE_FORCEINLINE float processSample(float input)
             {
-                // 1) Update LFOs
+                // 1) Update LFO outputs
                 for (size_t i = 0; i < NumGlobalLFOs; ++i) {
                     globalLfoValues[i] = globalLFOs[i].update();
                 }
 
-                // 2) Build newState
+                // 2) Build new state array
                 std::array<float, NumNodes> newState = nodeState;
                 newState[0] = input;
 
                 // 3) Process each stage
                 processStagesCombined(newState, nodeState, std::make_index_sequence<NumStages>{});
 
-                // 4) final output from node (NumNodes-1)
+                // 4) Compute final output from node (NumNodes-1)
                 float out = computeDestination<NumNodes - 1>(newState);
-
                 nodeState = newState;
                 return out;
             }
 
+            // New method to update delay times in all stages based on the global size parameter.
+            void updateGlobalSizeParameter(float globalSize) {
+                updateStagesDelayTimes(globalSize, std::make_index_sequence<NumStages>{});
+            }
+
         private:
-            // Prepare
             template <size_t... Is>
             JUCE_FORCEINLINE void prepareStages(float sr, std::index_sequence<Is...>)
             {
@@ -123,21 +125,26 @@ namespace project {
             JUCE_FORCEINLINE float computeDestinationImpl(const std::array<float, NumNodes>& s,
                 std::index_sequence<Is...>)
             {
-                // sum_{i=0..NumNodes-1} s[i]*routingMatrix[i][j]
+                // Compute sum_{i=0}^{NumNodes-1} s[i]*routingMatrix[i][j]
                 return ((s[Is] * routingMatrix[Is][j]) + ...);
             }
 
-            // unroll each stage => node i+1
+            // Unroll each stage: stage i -> node i+1
             template <size_t... Is>
             JUCE_FORCEINLINE void processStagesCombined(std::array<float, NumNodes>& newState,
                 const std::array<float, NumNodes>& oldState,
                 std::index_sequence<Is...>)
             {
-                // stage i => node i+1
                 ((newState[1 + Is] = std::get<Is>(stages).processSample(
                     computeDestination<1 + Is>(oldState)
-                )
-                    ), ...);
+                )), ...);
+            }
+
+            // Helper to update delay times in all stages.
+            template <size_t... Is>
+            JUCE_FORCEINLINE void updateStagesDelayTimes(float globalSize, std::index_sequence<Is...>)
+            {
+                ((std::get<Is>(stages).updateDelayTimes(globalSize)), ...);
             }
         };
 

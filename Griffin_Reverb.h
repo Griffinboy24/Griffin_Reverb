@@ -1,11 +1,10 @@
 #pragma once
 #include <JuceHeader.h>
-
-#include "src\MyReverbConfig.h"
-#include "src\MultiStageReverb.h"
-#include "src\StageReverb.h"
-#include "src\StageStereoizer.h"
-#include "src\ReverbCommon.h"
+#include "src/MyReverbConfig.h"
+#include "src/MultiStageReverb.h"
+#include "src/StageReverb.h"
+#include "src/StageStereoizer.h"
+#include "src/ReverbCommon.h"
 
 namespace project {
 
@@ -58,24 +57,27 @@ namespace project {
             {
                 for (int i = 0; i < numSamples; ++i)
                 {
-                    // build a mono input
+                    // Build a mono input
                     float mono = 0.5f * (leftChannelData[i] + rightChannelData[i]);
 
-                    // pass through the reverb
+                    // Pass through the reverb engine
                     float outMono = reverbEngine.processSample(mono);
 
-                    // Now let the stereoizer see the same global LFO outputs
-                    // We can do that each sample, or once per block if we trust continuity
-                    // For clarity, do it each sample here:
+                    // Let the stereoizer use the global LFO outputs
                     stereoizer.setGlobalLfoOutputsPointer(reverbEngine.globalLfoValues.data());
 
-                    // process into stereo
+                    // Process into stereo
                     float l, r;
                     stereoizer.processSample(outMono, l, r);
 
                     leftChannelData[i] = l;
                     rightChannelData[i] = r;
                 }
+            }
+
+            // New method to update the global size parameter
+            void updateGlobalSizeParameter(float newSize) {
+                reverbEngine.updateGlobalSizeParameter(newSize);
             }
 
         private:
@@ -87,6 +89,7 @@ namespace project {
         //---------------------------------------------
         // Our node usage
         AudioReverb monoReverb;
+        float globalSizeParam = 1.0f; // Default global size parameter
 
         void prepare(PrepareSpecs specs)
         {
@@ -98,7 +101,7 @@ namespace project {
             monoReverb.reset();
         }
 
-        // for each block
+        // Process each audio block
         template <typename ProcessDataType>
         void process(ProcessDataType& data)
         {
@@ -111,7 +114,25 @@ namespace project {
             monoReverb.process(leftChannelData, rightChannelData, blockSize);
         }
 
-        void createParameters(ParameterDataList& data) {}
+        // Parameter handling: adding global size parameter at index 4.
+        template <int P>
+        void setParameter(double v)
+        {
+            if (P == 4) {
+                globalSizeParam = static_cast<float>(v);
+                monoReverb.updateGlobalSizeParameter(globalSizeParam);
+            }
+            // Additional parameters can be handled for other indices as needed.
+        }
+
+        void createParameters(ParameterDataList& data)
+        {
+            parameter::data p("Global Size", { 0.1, 2.0, 0.01 });
+            registerCallback<4>(p);
+            p.setDefaultValue(1.0);
+            data.add(std::move(p));
+        }
+
         void handleHiseEvent(HiseEvent& e) {}
         template <typename FrameDataType>
         void processFrame(FrameDataType& data) {}

@@ -34,18 +34,24 @@ namespace project {
                 return processAPsRecursive<0>(inSample);
             }
 
+            // Update delay times for each AP based on the global parameter.
+            void updateDelayTimes(float globalSize) {
+                updateAPsDelayTimes(globalSize, std::make_index_sequence<numAPs>{});
+            }
+
         private:
             std::array<project::SimpleAP, numAPs> aps;
             const float* globalLfoPtr;
 
-            // Build allpasses from StageConfig::aps
+            // Build allpasses from StageConfig::aps, passing the scaleDelay flag.
             template <size_t... Is>
             JUCE_FORCEINLINE void initAPs(std::index_sequence<Is...>)
             {
                 ((aps[Is] = project::SimpleAP(
                     StageConfig::aps[Is].baseDelay,
                     StageConfig::aps[Is].coefficient,
-                    StageConfig::aps[Is].lfoIndex
+                    StageConfig::aps[Is].lfoIndex,
+                    StageConfig::scaleDelay
                 )), ...);
             }
 
@@ -76,6 +82,13 @@ namespace project {
                 processAPsRecursive(float current)
             {
                 return current;
+            }
+
+            // Helper to update delay times for all APs in this stage.
+            template <size_t... Is>
+            JUCE_FORCEINLINE void updateAPsDelayTimes(float globalSize, std::index_sequence<Is...>)
+            {
+                ((aps[Is].updateDelayTime(globalSize)), ...);
             }
         };
 
