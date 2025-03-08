@@ -130,6 +130,12 @@ namespace project {
                 updateStagesDelayTimes(globalSize, std::make_index_sequence<NumStages>{});
             }
 
+            // Update global density parameter for coefficient scaling (passes to stages).
+            void updateGlobalDensityParameter(float density)
+            {
+                updateStagesCoefficientScaling(density, std::make_index_sequence<NumStages>{});
+            }
+
         private:
             // Helper: process a single stage.
             template <size_t I>
@@ -140,6 +146,7 @@ namespace project {
                 float sum = 0.f;
                 for (size_t j = 0; j < NumConnections; ++j)
                 {
+                    // FIX: Check for connections with destination equal to the current stage's node.
                     if (Config::connections[j].dst == dest)
                     {
                         size_t src = Config::connections[j].src;
@@ -181,8 +188,13 @@ namespace project {
             {
                 ((std::get<Is>(stages).updateDelayTimes(globalSize)), ...);
             }
+
+            template <size_t... Is>
+            JUCE_FORCEINLINE void updateStagesCoefficientScaling(float globalDensity, std::index_sequence<Is...>)
+            {
+                ((std::get<Is>(stages).updateCoefficientScaling(globalDensity)), ...);
+            }
         };
 
     } // namespace multistage
 } // namespace project
- 

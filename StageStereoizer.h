@@ -6,10 +6,10 @@ namespace project {
 
         class StageStereoizer {
         public:
-            // Construct left/right allpasses with the scale flag enabled.
+            // Construct left/right allpasses with both delay scaling and coefficient scaling enabled.
             StageStereoizer()
-                : leftAP(2200.f, 0.5f, 0, true),  // base=2200, coeff=0.5, lfoIndex=0, scalable=true
-                rightAP(2000.f, 0.5f, 1, true), // base=2000, coeff=0.5, lfoIndex=1, scalable=true
+                : leftAP(2200.f, 0.5f, 0, true, true),  // base=2200, coeff=0.5, lfoIndex=0, scaleDelay=true, scaleCoefficient=true
+                rightAP(2000.f, 0.5f, 1, true, true),   // base=2000, coeff=0.5, lfoIndex=1, scaleDelay=true, scaleCoefficient=true
                 globalLfoPtr(nullptr)
             {
             }
@@ -43,10 +43,16 @@ namespace project {
                 rightOut = rightAP.processSample(monoIn, rVal);
             }
 
-            // New: Update delay times for both channels based on the global size parameter.
+            // Update delay times for both channels based on the global size parameter.
             void updateDelayTimes(float globalSize) {
                 leftAP.updateDelayTime(globalSize);
                 rightAP.updateDelayTime(globalSize);
+            }
+
+            // Update coefficient scaling (density) for both channels based on the global density parameter.
+            void updateCoefficientScaling(float globalDensity) {
+                leftAP.updateCoefficientScaling(globalDensity);
+                rightAP.updateCoefficientScaling(globalDensity);
             }
 
         private:

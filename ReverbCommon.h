@@ -75,20 +75,24 @@ namespace project {
 
     //==============================================================
     // SimpleAP: uses baseDelay + lfoValue and supports precomputed scaling.
+    // Now supports density scaling for coefficients.
     //==============================================================
     class SimpleAP {
     public:
         SimpleAP()
-            : originalBaseDelay(0.f), effectiveBaseDelay(0.f), coefficient(0.f),
-              lfoIndex(0), sampleRate(44100.f), writeIndex(0),
-              powerBufferSize(0), indexMask(0), scaleDelay(false)
+            : originalBaseDelay(0.f), effectiveBaseDelay(0.f),
+            originalCoefficient(0.f), effectiveCoefficient(0.f),
+            lfoIndex(0), sampleRate(44100.f), writeIndex(0),
+            powerBufferSize(0), indexMask(0), scaleDelay(false), scaleCoefficient(false)
         {
         }
 
-        // Constructor with scale flag
-        SimpleAP(float baseD, float coeff, size_t lfoIdx, bool scale)
-            : originalBaseDelay(baseD), effectiveBaseDelay(baseD), coefficient(coeff),
-              lfoIndex(lfoIdx), sampleRate(44100.f), writeIndex(0), scaleDelay(scale)
+        // Constructor with scale flags for delay and coefficient (density)
+        SimpleAP(float baseD, float coeff, size_t lfoIdx, bool scaleDelayFlag, bool scaleCoeffFlag)
+            : originalBaseDelay(baseD), effectiveBaseDelay(baseD),
+            originalCoefficient(coeff), effectiveCoefficient(coeff),
+            lfoIndex(lfoIdx), sampleRate(44100.f), writeIndex(0),
+            scaleDelay(scaleDelayFlag), scaleCoefficient(scaleCoeffFlag)
         {
             maxDelay = effectiveBaseDelay + 50.f;
         }
@@ -116,6 +120,13 @@ namespace project {
             }
         }
 
+        // Update effective coefficient based on the global density parameter if scaling is enabled.
+        void updateCoefficientScaling(float globalDensity) {
+            if (scaleCoefficient) {
+                effectiveCoefficient = originalCoefficient * globalDensity;
+            }
+        }
+
         JUCE_FORCEINLINE float processSample(float x, float lfoValue) {
             float targetDelay = effectiveBaseDelay + lfoValue;
             if (targetDelay < 0.f) {
@@ -132,14 +143,14 @@ namespace project {
             int index1 = (index0 + 1) & indexMask;
 
             float delayedV = (1.f - frac) * delayBuffer[index0]
-                + (frac) * delayBuffer[index1];
+                + (frac)*delayBuffer[index1];
 
-            float v = x - coefficient * delayedV;
-            float y = coefficient * v + delayedV;
+                float v = x - effectiveCoefficient * delayedV;
+                float y = effectiveCoefficient * v + delayedV;
 
-            delayBuffer[writeIndex] = v;
-            writeIndex = (writeIndex + 1) & indexMask;
-            return y;
+                delayBuffer[writeIndex] = v;
+                writeIndex = (writeIndex + 1) & indexMask;
+                return y;
         }
 
         size_t getLfoIndex() const { return lfoIndex; }
@@ -158,7 +169,8 @@ namespace project {
         float originalBaseDelay;
         float effectiveBaseDelay;
         float maxDelay;
-        float coefficient;
+        float originalCoefficient;
+        float effectiveCoefficient;
         size_t lfoIndex;
         float sampleRate;
         std::vector<float> delayBuffer;
@@ -166,6 +178,7 @@ namespace project {
         int powerBufferSize;
         int indexMask;
         bool scaleDelay;
+        bool scaleCoefficient;
     };
 
 } // namespace project
