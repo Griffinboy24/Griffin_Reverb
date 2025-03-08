@@ -136,6 +136,12 @@ namespace project {
                 updateStagesCoefficientScaling(density, std::make_index_sequence<NumStages>{});
             }
 
+            // Update global SVF parameters for stages that have attached SVF filter settings.
+            void updateGlobalSVFParameters(float cutoff, float dbGain)
+            {
+                updateStagesSVFParameters(cutoff, dbGain, std::make_index_sequence<NumStages>{});
+            }
+
         private:
             // Helper: process a single stage.
             template <size_t I>
@@ -193,6 +199,12 @@ namespace project {
             JUCE_FORCEINLINE void updateStagesCoefficientScaling(float globalDensity, std::index_sequence<Is...>)
             {
                 ((std::get<Is>(stages).updateCoefficientScaling(globalDensity)), ...);
+            }
+
+            template <size_t... Is>
+            JUCE_FORCEINLINE void updateStagesSVFParameters(float cutoff, float dbGain, std::index_sequence<Is...>)
+            {
+                ((std::get<Is>(stages).updateSVFParameters(cutoff, dbGain)), ...);
             }
         };
 

@@ -3,11 +3,11 @@
 #include <tuple>
 #include "ReverbCommon.h"
 
-// To do:  
+// To do:
+// // 1) in routing have input and output labelled, rather than numbered, infact can we use names for all? 
 // 2) Allow routing to unique stereo stages as final outputs
-// 3) Create svf filter stages (routable) 
-// 4) Improve routing by defining a list-of-connections instead of a matrix
-// 5) Higher order (nested) allpass types support 
+// 3) Create svf filter stages (routable)
+// 5) Higher order (nested) allpass types support
 // 6) FDN support + classic multichannel matrix types built in
 
 namespace project {
@@ -28,10 +28,15 @@ namespace project {
             inline static constexpr auto lfoFrequencies = ms_make_array(0.9128f, 1.1341f, 1.0f);
             inline static constexpr auto lfoAmplitudes = ms_make_array(11.0f, 9.0f, 10.0f);
 
-            // Stage0 
+            // Stage1
             struct StageConfig0 {
                 static constexpr bool scaleDelay = false; // Delay times scaling
-                static constexpr bool scaleCoeff = true;   // Coefficient scaling 
+                static constexpr bool scaleCoeff = true;   // Coefficient scaling
+                // SVF filter parameters for this stage:
+                static constexpr bool enableSVF = false;
+                static constexpr float svfCutoff = 0.0f;  // Hz
+                static constexpr float svfGain = 0.0f;       // dB (negative for high-frequency attenuation)
+                static constexpr bool attachSVF = false;      // SVF parameters not attached to user parameters
                 struct AP {
                     float baseDelay;
                     float coefficient;
@@ -46,10 +51,15 @@ namespace project {
                 );
             };
 
-            // Stage1
+            // Stage2
             struct StageConfig1 {
                 static constexpr bool scaleDelay = true;
-                static constexpr bool scaleCoeff = true; 
+                static constexpr bool scaleCoeff = true;
+                // SVF filter enabled for this stage.
+                static constexpr bool enableSVF = true;
+                static constexpr float svfCutoff = 0.0f;
+                static constexpr float svfGain = 0.0f;
+                static constexpr bool attachSVF = true;       // Attach SVF filter settings to user parameters
                 struct AP {
                     float baseDelay;
                     float coefficient;
@@ -65,10 +75,15 @@ namespace project {
                 );
             };
 
-            // Stage2 
+            // Stage3
             struct StageConfig2 {
-                static constexpr bool scaleDelay = true; 
-                static constexpr bool scaleCoeff = true;  
+                static constexpr bool scaleDelay = true;
+                static constexpr bool scaleCoeff = true;
+                // SVF filter parameters for this stage:
+                static constexpr bool enableSVF = true;
+                static constexpr float svfCutoff = 0.0f; 
+                static constexpr float svfGain = 0.0f;      
+                static constexpr bool attachSVF = true;     
                 struct AP {
                     float baseDelay;
                     float coefficient;
@@ -96,7 +111,7 @@ namespace project {
                 { 0, 1, 1.0f, false },
                 { 1, 2, 1.0f, false },
                 { 1, 3, 1.0f, false },
-                { 2, 2, 0.9f, true },   // Feedback connection.
+                { 2, 2, 0.9f, true },
                 { 2, 4, 1.0f, false },
                 { 3, 4, 0.8f, false }
             } };

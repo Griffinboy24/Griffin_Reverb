@@ -75,7 +75,8 @@ namespace project {
 
     //==============================================================
     // SimpleAP: uses baseDelay + lfoValue and supports precomputed scaling.
-    // Now supports density scaling for coefficients.
+    // Now allocates the maximum delay buffer size from the start,
+    // assuming the global size will only ever go up to 2×.
     //==============================================================
     class SimpleAP {
     public:
@@ -100,7 +101,9 @@ namespace project {
         void prepare(float sr) {
             sampleRate = sr;
             writeIndex = 0;
-            int reqSize = static_cast<int>(std::ceil(maxDelay)) + 4;
+            // Allocate maximum needed delay buffer size, assuming globalSize can be up to 2×.
+            float maxExpectedDelay = originalBaseDelay * 2.f + 50.f;
+            int reqSize = static_cast<int>(std::ceil(maxExpectedDelay)) + 4;
             powerBufferSize = nextPow2(reqSize);
             indexMask = powerBufferSize - 1;
             delayBuffer.assign(powerBufferSize, 0.f);
@@ -112,11 +115,11 @@ namespace project {
         }
 
         // Update effective delay based on the global size parameter if scaling is enabled.
+        // Since the delay buffer was allocated for the maximum delay, no reallocation is needed.
         void updateDelayTime(float globalSize) {
             if (scaleDelay) {
                 effectiveBaseDelay = originalBaseDelay * globalSize;
                 maxDelay = effectiveBaseDelay + 50.f;
-                // Optionally, re-prepare delayBuffer if maxDelay changes significantly.
             }
         }
 

@@ -91,6 +91,11 @@ namespace project {
                 reverbEngine.updateGlobalDensityParameter(newDensity);
             }
 
+            // Update global SVF parameters for stages that have attached SVF settings.
+            void updateGlobalSVFParameters(float cutoff, float dbGain) {
+                reverbEngine.updateGlobalSVFParameters(cutoff, dbGain);
+            }
+
         private:
             double sampleRate;
             MyEngine reverbEngine;
@@ -103,6 +108,8 @@ namespace project {
         float globalSizeParam = 1.0f;       // Default global size parameter.
         float globalFeedbackParam = 1.0f;   // Default global feedback parameter.
         float globalDensityParam = 1.0f;    // Default global density parameter.
+        float globalSVFCutoff = 1000.0f;      // Default SVF cutoff (Hz).
+        float globalSVFDb = -3.0f;            // Default SVF dB gain.
 
         void prepare(PrepareSpecs specs)
         {
@@ -128,7 +135,9 @@ namespace project {
         }
 
         // Parameter handling.
-        // We add three new parameters: index 4 for global size, index 5 for feedback scaling, index 6 for density scaling.
+        // We add new parameters:
+        // indices 4: global size, 5: feedback, 6: density,
+        // 7: SVF cutoff, 8: SVF dB gain.
         template <int P>
         void setParameter(double v)
         {
@@ -143,6 +152,14 @@ namespace project {
             else if (P == 6) {
                 globalDensityParam = static_cast<float>(v);
                 monoReverb.updateGlobalDensityParameter(globalDensityParam);
+            }
+            else if (P == 7) {
+                globalSVFCutoff = static_cast<float>(v);
+                monoReverb.updateGlobalSVFParameters(globalSVFCutoff, globalSVFDb);
+            }
+            else if (P == 8) {
+                globalSVFDb = static_cast<float>(v);
+                monoReverb.updateGlobalSVFParameters(globalSVFCutoff, globalSVFDb);
             }
             // Additional parameters for other indices could be handled here.
         }
@@ -169,8 +186,20 @@ namespace project {
                 p.setSkewForCentre(0.3); // Skew for more detail at smaller values
                 data.add(std::move(p));
             }
+            {
+                parameter::data p("SVF Cutoff", { 20.0, 20000.0, 1.0 });
+                registerCallback<7>(p);
+                p.setDefaultValue(8000.0);
+                p.setSkewForCentre(3000.0); // Skew for more detail at smaller values
+                data.add(std::move(p));
+            }
+            {
+                parameter::data p("SVF dB", { -12.0, 0.0, 0.1 });
+                registerCallback<8>(p);
+                p.setDefaultValue(-6.0);
+                data.add(std::move(p));
+            }
         }
-
 
         void handleHiseEvent(HiseEvent& e) {}
         template <typename FrameDataType>
