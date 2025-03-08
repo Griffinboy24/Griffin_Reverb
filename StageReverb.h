@@ -39,11 +39,16 @@ namespace project {
                 updateAPsDelayTimes(globalSize, std::make_index_sequence<numAPs>{});
             }
 
+            // Update coefficient scaling (density) for each AP based on the global density parameter.
+            void updateCoefficientScaling(float globalDensity) {
+                updateAPsCoefficientScaling(globalDensity, std::make_index_sequence<numAPs>{});
+            }
+
         private:
             std::array<project::SimpleAP, numAPs> aps;
             const float* globalLfoPtr;
 
-            // Build allpasses from StageConfig::aps, passing the scaleDelay flag.
+            // Build allpasses from StageConfig::aps, passing the scale flags.
             template <size_t... Is>
             JUCE_FORCEINLINE void initAPs(std::index_sequence<Is...>)
             {
@@ -51,7 +56,8 @@ namespace project {
                     StageConfig::aps[Is].baseDelay,
                     StageConfig::aps[Is].coefficient,
                     StageConfig::aps[Is].lfoIndex,
-                    StageConfig::scaleDelay
+                    StageConfig::scaleDelay,
+                    StageConfig::scaleCoeff
                 )), ...);
             }
 
@@ -89,6 +95,13 @@ namespace project {
             JUCE_FORCEINLINE void updateAPsDelayTimes(float globalSize, std::index_sequence<Is...>)
             {
                 ((aps[Is].updateDelayTime(globalSize)), ...);
+            }
+
+            // Helper to update coefficient scaling for all APs in this stage.
+            template <size_t... Is>
+            JUCE_FORCEINLINE void updateAPsCoefficientScaling(float globalDensity, std::index_sequence<Is...>)
+            {
+                ((aps[Is].updateCoefficientScaling(globalDensity)), ...);
             }
         };
 
