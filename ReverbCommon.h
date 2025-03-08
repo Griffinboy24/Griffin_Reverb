@@ -13,21 +13,26 @@
 #endif
 #endif
 
+// Build a std::array at compile time from variadic arguments
 template <typename T, typename... Ts>
 constexpr std::array<typename std::common_type<T, Ts...>::type, 1 + sizeof...(Ts)>
-ms_make_array(T t, Ts... ts) {
+ms_make_array(T t, Ts... ts)
+{
     return { t, ts... };
 }
 
 namespace project {
 
-    //==============================================================================
-    // Simple LFO Class
-    //==============================================================================
+    //==============================================================
+    // SimpleLFO: now has amplitude for global depth
+    //==============================================================
     class SimpleLFO {
     public:
-        SimpleLFO() : frequency(1.f), phase(0.f), sampleRate(44100.f), increment(0.f) {}
-        SimpleLFO(float freq) : frequency(freq), phase(0.f), sampleRate(44100.f), increment(0.f) {}
+        SimpleLFO() : frequency(1.f), amplitude(1.f), phase(0.f), sampleRate(44100.f), increment(0.f) {}
+        SimpleLFO(float freq, float amp)
+            : frequency(freq), amplitude(amp), phase(0.f), sampleRate(44100.f), increment(0.f)
+        {
+        }
 
         void prepare(float sr) {
             sampleRate = sr;
@@ -35,41 +40,54 @@ namespace project {
             increment = frequency / sampleRate;
         }
 
+        void reset() {
+            phase = 0.f;
+        }
+
+        // returns amplitude * approximate sine
         JUCE_FORCEINLINE float update() {
             phase += increment;
-            if (phase >= 1.f)
+            if (phase >= 1.f) {
                 phase -= 1.f;
-            return parSin(phase);
+            }
+            return amplitude * parSin(phase);
+        }
+
+        // optionally set amplitude or frequency at runtime
+        void setAmplitude(float newAmp) { amplitude = newAmp; }
+        void setFrequency(float newFreq) {
+            frequency = newFreq;
+            increment = frequency / sampleRate;
         }
 
     private:
-        float frequency;
+        float frequency;   // frequency in Hz
+        float amplitude;   // LFO amplitude
         float phase;
         float sampleRate;
         float increment;
 
-        // simple polynomial approximation of sin
         JUCE_FORCEINLINE float parSin(float ph) const {
             float shifted = 0.5f - ph;
             return shifted * (8.f - 16.f * std::fabs(shifted));
         }
     };
 
-    //==============================================================================
-    // SimpleAP (Allpass Delay) for modulated delay time
-    //==============================================================================
+    //==============================================================
+    // SimpleAP: no local depth, uses baseDelay + lfoValue
+    //==============================================================
     class SimpleAP {
     public:
         SimpleAP()
-            : baseDelay(0.f), maxDelay(0.f), coefficient(0.f), depth(0.f),
+            : baseDelay(0.f), maxDelay(0.f), coefficient(0.f),
             lfoIndex(0), sampleRate(44100.f), writeIndex(0),
             powerBufferSize(0), indexMask(0)
         {
         }
 
-        SimpleAP(float baseDelay, float coeff, float d, size_t lfoIdx)
-            : baseDelay(baseDelay), coefficient(coeff), depth(d),
-            lfoIndex(lfoIdx), sampleRate(44100.f), writeIndex(0)
+        SimpleAP(float baseD, float coeff, size_t lfoIdx)
+            : baseDelay(baseD), coefficient(coeff), lfoIndex(lfoIdx),
+            sampleRate(44100.f), writeIndex(0)
         {
             maxDelay = baseDelay + 50.f;
         }
@@ -88,8 +106,13 @@ namespace project {
             writeIndex = 0;
         }
 
-        JUCE_FORCEINLINE float processSample(float x, float lfoValue) {
-            float targetDelay = baseDelay + depth * lfoValue;
+        JUCE_FORCEINLINE float processSample(float x, float lfoValue)
+        {
+            float targetDelay = baseDelay + lfoValue;
+            if (targetDelay < 0.f) {
+                targetDelay = 0.f; // safety clamp
+            }
+
             int d_int = static_cast<int>(targetDelay);
             float d_frac = targetDelay - (float)d_int;
 
@@ -100,7 +123,7 @@ namespace project {
             int index1 = (index0 + 1) & indexMask;
 
             float delayedV = (1.f - frac) * delayBuffer[index0]
-                + frac * delayBuffer[index1];
+                + (frac)*delayBuffer[index1];
 
                 float v = x - coefficient * delayedV;
                 float y = coefficient * v + delayedV;
@@ -126,7 +149,6 @@ namespace project {
         float baseDelay;
         float maxDelay;
         float coefficient;
-        float depth;
         size_t lfoIndex;
         float sampleRate;
 
