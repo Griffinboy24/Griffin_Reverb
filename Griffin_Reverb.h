@@ -1,5 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
+
 #include "src/MyReverbConfig.h"
 #include "src/MultiStageReverb.h"
 #include "src/StageReverb.h"
@@ -52,21 +53,21 @@ namespace project {
                 stereoizer.reset();
             }
 
-            // Process a block of samples
+            // Process a block of samples.
             void process(float* leftChannelData, float* rightChannelData, int numSamples)
             {
                 for (int i = 0; i < numSamples; ++i)
                 {
-                    // Build a mono input
+                    // Build a mono input.
                     float mono = 0.5f * (leftChannelData[i] + rightChannelData[i]);
 
-                    // Pass through the reverb engine
+                    // Pass through the reverb engine.
                     float outMono = reverbEngine.processSample(mono);
 
-                    // Let the stereoizer use the global LFO outputs
+                    // Let the stereoizer use the global LFO outputs.
                     stereoizer.setGlobalLfoOutputsPointer(reverbEngine.globalLfoValues.data());
 
-                    // Process into stereo
+                    // Process into stereo.
                     float l, r;
                     stereoizer.processSample(outMono, l, r);
 
@@ -75,9 +76,14 @@ namespace project {
                 }
             }
 
-            // New method to update the global size parameter
+            // Update global delay (size) parameter.
             void updateGlobalSizeParameter(float newSize) {
                 reverbEngine.updateGlobalSizeParameter(newSize);
+            }
+
+            // Update global feedback parameter (which scales connections flagged for feedback).
+            void updateFeedbackParameter(float newFeedback) {
+                reverbEngine.updateFeedbackParameter(newFeedback);
             }
 
         private:
@@ -89,7 +95,8 @@ namespace project {
         //---------------------------------------------
         // Our node usage
         AudioReverb monoReverb;
-        float globalSizeParam = 1.0f; // Default global size parameter
+        float globalSizeParam = 1.0f;   // Default global size parameter.
+        float globalFeedbackParam = 1.0f; // Default global feedback parameter.
 
         void prepare(PrepareSpecs specs)
         {
@@ -101,7 +108,7 @@ namespace project {
             monoReverb.reset();
         }
 
-        // Process each audio block
+        // Process each audio block.
         template <typename ProcessDataType>
         void process(ProcessDataType& data)
         {
@@ -114,7 +121,8 @@ namespace project {
             monoReverb.process(leftChannelData, rightChannelData, blockSize);
         }
 
-        // Parameter handling: adding global size parameter at index 4.
+        // Parameter handling.
+        // We add two new parameters: index 4 for global size, index 5 for feedback scaling.
         template <int P>
         void setParameter(double v)
         {
@@ -122,15 +130,27 @@ namespace project {
                 globalSizeParam = static_cast<float>(v);
                 monoReverb.updateGlobalSizeParameter(globalSizeParam);
             }
-            // Additional parameters can be handled for other indices as needed.
+            else if (P == 5) {
+                globalFeedbackParam = static_cast<float>(v);
+                monoReverb.updateFeedbackParameter(globalFeedbackParam);
+            }
+            // Additional parameters for other indices could be handled here.
         }
 
         void createParameters(ParameterDataList& data)
         {
-            parameter::data p("Global Size", { 0.1, 2.0, 0.01 });
-            registerCallback<4>(p);
-            p.setDefaultValue(1.0);
-            data.add(std::move(p));
+            {
+                parameter::data p("Global Size", { 0.1, 1.5, 0.01 });
+                registerCallback<4>(p);
+                p.setDefaultValue(1.0);
+                data.add(std::move(p));
+            }
+            {
+                parameter::data p("Feedback", { 0.0, 1.0, 0.01 });
+                registerCallback<5>(p);
+                p.setDefaultValue(0.7);
+                data.add(std::move(p));
+            }
         }
 
         void handleHiseEvent(HiseEvent& e) {}

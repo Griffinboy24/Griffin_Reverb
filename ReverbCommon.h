@@ -80,15 +80,15 @@ namespace project {
     public:
         SimpleAP()
             : originalBaseDelay(0.f), effectiveBaseDelay(0.f), coefficient(0.f),
-            lfoIndex(0), sampleRate(44100.f), writeIndex(0),
-            powerBufferSize(0), indexMask(0), scaleDelay(false)
+              lfoIndex(0), sampleRate(44100.f), writeIndex(0),
+              powerBufferSize(0), indexMask(0), scaleDelay(false)
         {
         }
 
         // Constructor with scale flag
         SimpleAP(float baseD, float coeff, size_t lfoIdx, bool scale)
             : originalBaseDelay(baseD), effectiveBaseDelay(baseD), coefficient(coeff),
-            lfoIndex(lfoIdx), sampleRate(44100.f), writeIndex(0), scaleDelay(scale)
+              lfoIndex(lfoIdx), sampleRate(44100.f), writeIndex(0), scaleDelay(scale)
         {
             maxDelay = effectiveBaseDelay + 50.f;
         }
@@ -132,14 +132,14 @@ namespace project {
             int index1 = (index0 + 1) & indexMask;
 
             float delayedV = (1.f - frac) * delayBuffer[index0]
-                + (frac)*delayBuffer[index1];
+                + (frac) * delayBuffer[index1];
 
-                float v = x - coefficient * delayedV;
-                float y = coefficient * v + delayedV;
+            float v = x - coefficient * delayedV;
+            float y = coefficient * v + delayedV;
 
-                delayBuffer[writeIndex] = v;
-                writeIndex = (writeIndex + 1) & indexMask;
-                return y;
+            delayBuffer[writeIndex] = v;
+            writeIndex = (writeIndex + 1) & indexMask;
+            return y;
         }
 
         size_t getLfoIndex() const { return lfoIndex; }

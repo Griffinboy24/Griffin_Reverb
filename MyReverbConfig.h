@@ -7,23 +7,31 @@
 // 1) Allow for global user parameters on delay length and coefficients and feedback 
 // 2) Allow routing to unique stereo stages as final outputs
 // 3) Create svf filter stages (routable) 
-// 4) Is there a cleverer way to define routing? Make it easier for different stage types. Perhaps not a matrix but a list of connections? Increase Freedom. 
+// 4) Improve routing by defining a list-of-connections instead of a matrix
 // 5) Higher order (nested) allpass types support 
 // 6) FDN support + classic multichannel matrix types built in
 
 namespace project {
     namespace multistage {
 
+        // Define a connection structure.
+        struct Connection {
+            size_t src;         // Source node index.
+            size_t dst;         // Destination node index.
+            float baseWeight;   // Base connection weight.
+            bool scaleFeedback; // If true, weight is scaled by a runtime feedback parameter.
+        };
+
         struct MyReverbConfig
         {
-            // LFO definitions
+            // LFO definitions.
             static constexpr size_t NumGlobalLFOs = 3;
             inline static constexpr auto lfoFrequencies = ms_make_array(0.9128f, 1.1341f, 1.0f);
             inline static constexpr auto lfoAmplitudes = ms_make_array(11.0f, 9.0f, 10.0f);
 
             // Stage0 
             struct StageConfig0 {
-                static constexpr bool scaleDelay = false; // Delay times will be scaled.
+                static constexpr bool scaleDelay = false; // Delay times will not be scaled.
                 struct AP {
                     float baseDelay;
                     float coefficient;
@@ -40,7 +48,7 @@ namespace project {
 
             // Stage1
             struct StageConfig1 {
-                static constexpr bool scaleDelay = true;  // Delay times will be scaled.
+                static constexpr bool scaleDelay = true;
                 struct AP {
                     float baseDelay;
                     float coefficient;
@@ -73,21 +81,22 @@ namespace project {
                 );
             };
 
-            // Combine => 3 stages => 5 nodes (input + 3 stages + output)
+            // Combine: 3 stages => 5 nodes (node 0: input, nodes 1-3: stages, node 4: output)
             using StageTuple = std::tuple<StageConfig0, StageConfig1, StageConfig2>;
             inline static constexpr StageTuple stages = { StageConfig0{}, StageConfig1{}, StageConfig2{} };
 
             static constexpr size_t NumStages = std::tuple_size<StageTuple>::value;
             static constexpr size_t NumNodes = NumStages + 2;
 
-            // 5x5 routing matrix
-            inline static constexpr std::array<std::array<float, NumNodes>, NumNodes> routingMatrix =
-            { {
-                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 1.0f, 0.0f },
-                { 0.0f, 0.0f, 0.7f, 0.0f, 1.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f }
+            // Instead of a routing matrix, define a list-of-connections.
+			// source, send, amount, connect to feedback parameter
+            inline static constexpr std::array<Connection, 6> connections = { {
+                { 0, 1, 1.0f, false },
+                { 1, 2, 1.0f, false },
+                { 1, 3, 1.0f, false },
+                { 2, 2, 0.9f, true },   // Feedback connection.
+                { 2, 4, 1.0f, false },
+                { 3, 4, 0.7f, false }
             } };
         };
 
